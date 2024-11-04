@@ -29,7 +29,8 @@
     "react-native-safe-area-context": "^4.14.0",
     "react-native-screens": "^3.35.0",
     "react-native-snap-carousel": "^3.9.1",
-    "typescript": "~5.3.3"
+    "typescript": "~5.3.3",
+    "expo-av": "~14.0.7"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0"

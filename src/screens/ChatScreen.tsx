@@ -1,10 +1,12 @@
 import React, { useState, useRef } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image, ScrollView, Dimensions, ToastAndroid, ImageBackground } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image, ScrollView, Dimensions, ToastAndroid, ImageBackground, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import Markdown from 'react-native-markdown-display';
 import OpenAI from 'openai';
+import { stringify } from './../../node_modules/css-what/lib/es/stringify';
+import { Video } from 'expo-av';
 
 const API_KEY = "93ed253bc7234ec9804c2cdcd6facbcc";
 const { width, height } = Dimensions.get('window');
@@ -20,6 +22,9 @@ const ChatScreen = () => {
     const [loading, setLoading] = useState(false);
     const [encodeImages, setEncodeImages] = useState([]);
     const scrollViewRef = useRef(null);
+    const [videoGenerating, setVideoGenerating] = useState(false);
+    const [videoUri, setVideoUri] = useState(null);
+    const [vedioPrompt, setVedioPrompt] = useState<any>('')
 
     const handleAttachImage = async () => {
         const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -62,29 +67,8 @@ const ChatScreen = () => {
             ToastAndroid.showWithGravity('Image Captured', ToastAndroid.SHORT, ToastAndroid.CENTER);
         }
     };
-   
-        const parseResponse = (response) => {
-            try {
-                // Check if the response is in a JSON-like string format
-                const responseObject = JSON.parse(response);
-                
-                if (responseObject.instructions && responseObject.video_prompt) {
-                    // Extract instructions and video prompt
-                    const instructionsPart = responseObject.instructions.trim();
-                    const videoPromptPart = responseObject.video_prompt.trim();
-        
-                    console.log("Instructions:", instructionsPart);
-                    console.log("Video Prompt:", videoPromptPart);
-        
-                    return { instructions: instructionsPart, video_prompt: videoPromptPart };
-                }
-                
-                return { error: "Expected format not found in the response." };
-            } catch (error) {
-                return { error: `Failed to parse response: ${error.message}` };
-            }
-        };
-        
+
+
     const handleSend = async () => {
         if (!prompt && encodeImages.length === 0) {
             ToastAndroid.showWithGravity('Please enter a prompt or attach an image.', ToastAndroid.SHORT, ToastAndroid.CENTER);
@@ -96,6 +80,7 @@ const ChatScreen = () => {
         try {
             const systemPrompt = `You are a helpful AI agent specializing in first aid guidance. When given images of accident scenes, generate clear, step-by-step first aid instructions. If only a text prompt is provided, offer general guidance relevant to the accident scenario. Always create a separate prompt for video demonstration of the first aid steps, regardless of whether images are provided.`;
 
+            // const systemPrompt = `yor are an ai Assistant`;
             const messages: any = [
                 { role: "system", content: systemPrompt },
                 { role: "user", content: prompt },
@@ -119,7 +104,7 @@ const ChatScreen = () => {
                         ...imageContents,
                         {
                             type: "text",
-                            text: `${imageTags} ${prompt}`
+                            text: `${imageTags}${prompt}`
                         }
                     ]
                 });
@@ -135,10 +120,24 @@ const ChatScreen = () => {
                 top_p: 1
             });
             console.log(response.choices[0].message.content)
-
-            const re = parseResponse(response.choices[0].message.content);
-            console.log("lll", re)
-            setAiResponse(prev => [...prev, { promptSend: prompt, responseBack: response.choices[0].message.content }]);
+            // try {
+            //     const data = response.choices[0].message.content.split("Video Demonstration Prompt")[1].trim().replace(/"/g, '').replace(/,/g, '');
+            //     setVedioPrompt(data)
+            //     main(data)
+            //     console.log('data', data);
+            // } catch (error) {
+            //     console.error("JSON Parse error:", error.message);
+            // }
+            // main(response.choices[0].message.content)
+            setAiResponse(prev => [
+                ...prev,
+                {
+                    promptSend: prompt,
+                    responseBack: response.choices[0].message.content,
+                    uris: images
+                }
+            ]);
+            // main();
             setPrompt('');
             setImages([]);
             setEncodeImages([]);
@@ -151,6 +150,137 @@ const ChatScreen = () => {
         }
     };
 
+    // Function to generate a video
+    async function generateVideo(token, d) {
+        const url = "https://api.rhymes.ai/v1/generateVideoSyn";
+        const headers = {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+        };
+        console.log("vedioPrompt", d);
+        const data = {
+            "refined_prompt": `analyze these steps and create vedio ${d}`,
+            "num_step": 100,
+            "cfg_scale": 7.5,
+            "user_prompt": `analyze these steps and create vedio ${d}`,
+            "rand_seed": 12345
+        };
+
+        try {
+            const response = await fetch(url, {
+                method: "POST",
+                headers: headers,
+                body: JSON.stringify(data)
+            });
+
+            // Check if the request was successful
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+
+            const responseData = await response.json();  // Return the JSON response
+            return responseData;
+        } catch (error) {
+            console.error("An error occurred:", error.message);
+            return null;  // Handle error appropriately
+        }
+    }
+
+    // Function to query the video status
+    // async function queryVideoStatus(token, requestId) {
+    //     const url = `https://api.rhymes.ai/v1/videoQuery?requestId=${requestId}`;
+    //     const headers = {
+    //         "Authorization": `Bearer ${token}`
+    //     };
+
+    //     try {
+    //         const response = await fetch(url, {
+    //             method: "GET",
+    //             headers: headers
+    //         });
+
+    //         // Check if the request was successful
+    //         if (!response.ok) {
+    //             throw new Error(`HTTP error! Status: ${response.status}`);
+    //         }
+
+    //         const statusData = await response.json();  // Return the JSON response
+    //         return statusData;
+    //     } catch (error) {
+    //         console.error("An error occurred:", error.message);
+    //         return null;  // Handle error appropriately
+    //     }
+    // }
+    async function queryVideoStatus(token, requestId) {
+        console.log(requestId)
+        const url = `https://api.rhymes.ai/v1/videoQuery?requestId=${requestId}`;
+        const headers = {
+            "Authorization": `Bearer ${token}`
+        };
+
+        const maxWaitTime = 600000; // 3 minutes in milliseconds
+        const checkInterval = 30000; // 30 seconds
+        let elapsed = 0;
+
+        while (elapsed < maxWaitTime) {
+            try {
+                const response = await fetch(url, {
+                    method: "GET",
+                    headers: headers
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+
+                const statusData = await response.json();
+
+                // Check if the video URL is available within the data key
+                if (statusData.data) {  // Adjust this if the structure is different
+                    return statusData;  // Return the video URL once it's available
+                }
+
+                // Wait for the interval before checking again
+                await new Promise(resolve => setTimeout(resolve, checkInterval));
+                elapsed += checkInterval;
+
+            } catch (error) {
+                console.error("An error occurred:", error.message);
+                return null;  // Handle error appropriately if needed
+            }
+        }
+
+        // If the loop exits without finding the video URL, log a timeout and return null
+        console.error("Request timed out after 3 minutes without a video URL.");
+        return null;
+    }
+
+    // Example usage
+
+    async function main(data) {
+        console.log("ddd", data)
+        setVideoGenerating(true);  // Show loading indicator for video generation
+        const bearerToken = API_KEY;
+        const responseData = await generateVideo(bearerToken, data);
+
+        if (responseData) {
+            const requestId = responseData.data;
+            const statusData = await queryVideoStatus(bearerToken, requestId);
+            console.log("statusData" , statusData)
+            if (statusData && statusData.data) {
+                console.log("sdfsd",statusData)
+                setVideoUri(statusData.data);  // Assuming video URL is available
+            } else {
+                ToastAndroid.showWithGravity('Failed to fetch video URL.', ToastAndroid.SHORT, ToastAndroid.CENTER);
+            }
+        } else {
+            ToastAndroid.showWithGravity('Failed to start video generation.', ToastAndroid.SHORT, ToastAndroid.CENTER);
+        }
+        setVideoGenerating(false);
+    }
+
+    // Call the main function
+
 
 
 
@@ -160,7 +290,6 @@ const ChatScreen = () => {
         setEncodeImages(encodeImages.filter(image => image !== uri));
         ToastAndroid.showWithGravity('Image Deleted', ToastAndroid.SHORT, ToastAndroid.CENTER);
     };
-
     return (
         <KeyboardAvoidingView
             style={styles.container}
@@ -192,7 +321,7 @@ const ChatScreen = () => {
                         showsVerticalScrollIndicator={false}
                     >
                         {aiResponse.map((r, index) => (
-                            <View key={index}>
+                            <View key={index} style={styles.chatMessage}>
                                 <View>
                                     <MaterialIcons name="supervised-user-circle" size={24} color="#0d0c32" />
                                     <Text style={styles.chatText}>You: {r?.promptSend}</Text>
@@ -204,8 +333,42 @@ const ChatScreen = () => {
                                 <Markdown>
                                     {r?.responseBack}
                                 </Markdown>
+
+                                {!videoUri && (
+                                    <TouchableOpacity
+                                        style={styles.generateButton}
+                                        onPress={() => {
+                                            const params = `Please generate a video solely focused on demonstrating the following first aid steps in a clear, step-by-step manner. Do not include any content or visuals unrelated to these instructions. Only depict actions, gestures, and environments necessary for accurately following these specific steps:${r?.responseBack}Ensure that the generated video strictly adheres to these instructions without any additional or unrelated content.`
+
+                                            main(params)
+                                        }}
+                                        disabled={videoGenerating}
+                                    >
+                                        {videoGenerating ? (
+                                            <ActivityIndicator size="small" color="#fff" />
+                                        ) : (
+                                            <Text style={styles.generateButtonText}>Generate Video</Text>
+                                        )}
+                                    </TouchableOpacity>
+                                )}
                             </View>
                         ))}
+
+                        {videoUri && (
+                            <View style={styles.videoContainer}>
+                                <Text style={styles.videoTitle}>Video:</Text>
+                                <Video
+                                    source={{ uri: videoUri }}
+                                    rate={1.0}
+                                    volume={1.0}
+                                    isMuted={false}
+                                    // resizeMode="cover"
+                                    shouldPlay
+                                    isLooping
+                                    style={styles.video}
+                                />
+                            </View>
+                        )}
                     </ScrollView>
                 )}
 
@@ -247,9 +410,9 @@ const ChatScreen = () => {
     );
 };
 
+export default ChatScreen;
 
-export default ChatScreen
-
+// Style adjustments (optional)
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -264,6 +427,9 @@ const styles = StyleSheet.create({
         borderTopRightRadius: 10,
         borderTopLeftRadius: 10,
         backgroundColor: 'white',
+    },
+    chatMessage: {
+        marginBottom: 10,
     },
     banner: {
         width: '100%',
@@ -332,4 +498,28 @@ const styles = StyleSheet.create({
         padding: 10,
         borderRadius: 10,
     },
-})
+    generateButton: {
+        backgroundColor: '#ff4500',
+        borderRadius: 10,
+        padding: 10,
+        alignItems: 'center',
+        marginTop: 10,
+    },
+    generateButtonText: {
+        color: '#fff',
+        fontWeight: 'bold',
+    },
+    videoContainer: {
+        marginVertical: 20,
+        alignItems: 'center',
+    },
+    videoTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    video: {
+        width: width - 20,
+        height: height * 0.4,
+        borderRadius: 10,
+    },
+});
