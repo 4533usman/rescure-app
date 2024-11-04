@@ -8,7 +8,7 @@ import OpenAI from 'openai';
 import { stringify } from './../../node_modules/css-what/lib/es/stringify';
 import { Video } from 'expo-av';
 
-const API_KEY = "93ed253bc7234ec9804c2cdcd6facbcc";
+const API_KEY = "API_KEY";
 const { width, height } = Dimensions.get('window');
 const client = new OpenAI({
     baseURL: 'https://api.rhymes.ai/v1',
@@ -266,9 +266,9 @@ const ChatScreen = () => {
         if (responseData) {
             const requestId = responseData.data;
             const statusData = await queryVideoStatus(bearerToken, requestId);
-            console.log("statusData" , statusData)
+            console.log("statusData", statusData)
             if (statusData && statusData.data) {
-                console.log("sdfsd",statusData)
+                console.log("sdfsd", statusData)
                 setVideoUri(statusData.data);  // Assuming video URL is available
             } else {
                 ToastAndroid.showWithGravity('Failed to fetch video URL.', ToastAndroid.SHORT, ToastAndroid.CENTER);
